@@ -130,9 +130,9 @@ class Amazon:
         self.start_time_atc = 0
         self.end_time_atc = 0
         self.webdriver_child_pids = []
-        self.driver = None
         self.refresh_delay = DEFAULT_REFRESH_DELAY
         self.testing = False
+        self._stop = False
         self.slow_mode = slow_mode
         self.setup_driver = True
         self.headless = headless
@@ -151,6 +151,16 @@ class Amazon:
         amazon_config = global_config.get_amazon_config(encryption_pass)
         self.profile_path = global_config.get_browser_profile_path()
 
+        self.asin_groups = 0
+        self.amazon_website = "smile.amazon.com"
+        self.wait = True
+        self.driver = None
+
+    def start(self, _1, _2):
+        log.info("Starting Amazon bot")
+        self.wait = False
+
+    def configure(self):
         try:
             presence.start_presence()
         except Exception in pyexceptions:
@@ -215,13 +225,18 @@ class Amazon:
         else:
             self.ACTIVE_OFFER_URL = AMAZON_URLS["OFFER_URL"]
 
+    def stop(self, _1, _2):
+        log.info("Stopping Amazon bot")
+        self._stop = True
+
     def run(self, delay=DEFAULT_REFRESH_DELAY, test=False):
+        self._stop = False
         self.testing = test
         self.refresh_delay = delay
         self.show_config()
 
         log.info("Waiting for home page.")
-        while True:
+        while True and not self._stop:
             try:
                 self.get_page(url=AMAZON_URLS["BASE_URL"])
                 break
@@ -234,7 +249,7 @@ class Amazon:
                 time.sleep(3)
                 pass
         cart_quantity = self.get_cart_count()
-        if cart_quantity > 0:
+        if cart_quantity > 0 and not self._stop:
             log.warning(f"Found {cart_quantity} item(s) in your cart.")
             log.info("Delete all item(s) in cart before starting bot.")
             self.driver.get(AMAZON_URLS["CART_URL"])
@@ -242,13 +257,13 @@ class Amazon:
             time.sleep(30)
             return
         self.handle_startup()
-        if not self.is_logged_in():
+        if not self.is_logged_in() and not self._stop:
             self.login()
         self.notification_handler.play_notify_sound()
         self.send_notification(
             "Bot Logged in and Starting up", "Start-Up", self.take_screenshots
         )
-        if self.get_cart_count() > 0:
+        if self.get_cart_count() > 0 and not self._stop:
             log.warning(f"Found {cart_quantity} item(s) in your cart.")
             log.info("Delete all item(s) in cart before starting bot.")
             self.driver.get(AMAZON_URLS["CART_URL"])
@@ -260,7 +275,7 @@ class Amazon:
 
         log.info("Checking stock for items.")
 
-        while continue_stock_check:
+        while continue_stock_check and not self._stop:
             self.unknown_title_notification_sent = False
             asin = self.run_asins(delay)
             # found something in stock and under reserve
@@ -270,7 +285,7 @@ class Amazon:
             self.order_retry = 0
             loop_iterations = 0
             self.great_success = False
-            while self.try_to_checkout:
+            while self.try_to_checkout and not self._stop:
                 try:
                     self.navigate_pages(test)
                 # if for some reason page transitions in the middle of checking elements, don't break the program
@@ -281,21 +296,22 @@ class Amazon:
                     not self.try_to_checkout
                     and not self.single_shot
                     and self.great_success
+                    and not self._stop
                 ):
                     self.remove_asin_list(asin)
                 # checkout loop limiters
-                elif self.checkout_retry > DEFAULT_MAX_PTC_TRIES:
+                elif self.checkout_retry > DEFAULT_MAX_PTC_TRIES and not self._stop:
                     self.try_to_checkout = False
                     self.fail_to_checkout_note()
-                elif self.order_retry > DEFAULT_MAX_PYO_TRIES:
+                elif self.order_retry > DEFAULT_MAX_PYO_TRIES and not self._stop:
                     self.try_to_checkout = False
                     self.fail_to_checkout_note()
                 loop_iterations += 1
-                if loop_iterations > DEFAULT_MAX_CHECKOUT_LOOPS:
+                if loop_iterations > DEFAULT_MAX_CHECKOUT_LOOPS and not self._stop:
                     self.fail_to_checkout_note()
                     self.try_to_checkout = False
             # if no items left it list, let loop end
-            if not self.asin_list:
+            if not self.asin_list and not self._stop:
                 continue_stock_check = False
         runtime = time.time() - self.start_time
         log.info(f"FairGame bot ran for {runtime} seconds.")
@@ -348,7 +364,7 @@ class Amazon:
         email_field = None
         password_field = None
         timeout = self.get_timeout()
-        while True:
+        while True and not self._stop:
             try:
                 email_field = self.driver.find_element_by_xpath('//*[@id="ap_email"]')
                 break
@@ -403,7 +419,7 @@ class Amazon:
         password_field = None
         timeout = self.get_timeout()
         current_page = self.driver.title
-        while True:
+        while True and not self._stop:
             try:
                 password_field = self.driver.find_element_by_xpath(
                     '//*[@id="ap_password"]'
@@ -432,7 +448,7 @@ class Amazon:
             self.handle_captcha(False)
         if self.driver.title in amazon_config["TWOFA_TITLES"]:
             log.info("enter in your two-step verification code in browser")
-            while self.driver.title in amazon_config["TWOFA_TITLES"]:
+            while self.driver.title in amazon_config["TWOFA_TITLES"] and not self._stop:
                 # Wait for the user to enter 2FA
                 time.sleep(2)
         log.info(f'Logged in as {amazon_config["username"]}')
@@ -440,7 +456,7 @@ class Amazon:
     @debug
     def run_asins(self, delay):
         found_asin = False
-        while not found_asin:
+        while not found_asin and not self._stop:
             for i in range(len(self.asin_list)):
                 for asin in self.asin_list[i]:
                     self.start_time_check = time.time()
@@ -462,7 +478,7 @@ class Amazon:
         presence.searching_update()
 
         # handles initial page load only
-        while True:
+        while True and not self._stop:
             try:
                 self.get_page(f.url)
                 log.debug(f"Initial page title {self.driver.title}")
@@ -508,7 +524,7 @@ class Amazon:
 
         timeout = self.get_timeout()
         atc_buttons = None
-        while True:
+        while True and not self._stop:
             buy_box = False
             # Sanity check to see if we have any offers
             try:
@@ -669,7 +685,7 @@ class Amazon:
                 return False
 
         timeout = self.get_timeout()
-        while True:
+        while True and not self._stop:
             if buy_box:
                 prices = self.driver.find_elements_by_xpath(
                     "//span[@id='price_inside_buybox']"
@@ -687,7 +703,7 @@ class Amazon:
         shipping_prices = []
 
         timeout = self.get_timeout()
-        while True:
+        while True and not self._stop:
             # Check for offers"
             if buy_box:
                 offer_xpath = "//form[@id='addToCart']"
@@ -851,7 +867,7 @@ class Amazon:
         # Open the add.html URL in Selenium
         f = f"{AMAZON_URLS['ATC_URL']}?OfferListingId.1={offering_id}&Quantity.1=1"
         atc_attempts = 0
-        while atc_attempts < max_atc_retries:
+        while atc_attempts < max_atc_retries and not self._stop:
             with self.wait_for_page_content_change(timeout=5):
                 try:
                     self.driver.get(f)
@@ -903,7 +919,7 @@ class Amazon:
                 f"Title was blank, checking to find a real title for {timeout_seconds} seconds"
             )
             timeout = self.get_timeout(timeout=timeout_seconds)
-            while time.time() <= timeout:
+            while time.time() <= timeout and not self._stop:
                 if self.driver.title != "":
                     title = self.driver.title
                     log.debug(f"found a real title: {title}.")
@@ -1052,7 +1068,7 @@ class Amazon:
 
             log.info("trying to click proceed to checkout")
             timeout = self.get_timeout()
-            while True:
+            while True and not self._stop:
                 try:
                     button = self.get_amazon_element(key="PTC")
                     break
@@ -1183,7 +1199,7 @@ class Amazon:
             "Prime offer page popped up, user intervention required"
         )
         timeout = self.get_timeout(timeout=60)
-        while self.driver.title in amazon_config["PRIME_TITLES"]:
+        while self.driver.title in amazon_config["PRIME_TITLES"] and not self._stop:
             if time.time() > timeout:
                 log.info("user did not intervene in time, will try and refresh page")
                 with self.wait_for_page_content_change():
@@ -1220,7 +1236,7 @@ class Amazon:
         button = None
         tries = 0
         maxTries = 10
-        while not button and tries < maxTries:
+        while not button and tries < maxTries and not self._stop:
             try:
                 button = self.get_amazon_element("CART_BUTTON")
             except sel_exceptions.NoSuchElementException:
@@ -1243,7 +1259,7 @@ class Amazon:
             self.take_screenshots,
         )
         timeout = self.get_timeout(timeout=300)
-        while self.driver.title == current_page:
+        while self.driver.title == current_page and not self._stop:
             time.sleep(0.25)
             if time.time() > timeout:
                 log.error("user failed to intervene in time, returning to stock check")
@@ -1260,7 +1276,7 @@ class Amazon:
             pass
         timeout = self.get_timeout()
         button = None
-        while True:
+        while True and not self._stop:
             try:
                 button = self.get_amazon_element(key="PTC")
                 break
@@ -1320,7 +1336,7 @@ class Amazon:
         previous_title = self.driver.title
         button = None
         timeout = self.get_timeout()
-        while True:
+        while True and not self._stop:
             try:
                 button = self.driver.find_element_by_xpath(self.button_xpaths[0])
             except sel_exceptions.NoSuchElementException:
@@ -1429,7 +1445,7 @@ class Amazon:
                                 while (
                                     time.time() < timeout
                                     and self.driver.title == current_page
-                                ):
+                                ) and not self._stop:
                                     time.sleep(0.5)
                                 # check above is not true, then we must have passed captcha, return back to nav handler
                                 # Otherwise refresh page to try again - either way, returning to nav page handler
@@ -1481,7 +1497,7 @@ class Amazon:
         log.info("On Business PO Page, Trying to move on to checkout")
         button = None
         timeout = self.get_timeout()
-        while True:
+        while True and not self._stop:
             try:
                 button = self.driver.find_element_by_xpath(
                     '//*[@id="a-autoid-0"]/span/input'
@@ -1547,7 +1563,7 @@ class Amazon:
         time_to_end = self.get_timeout(timeout=timeout)
         while time.time() < time_to_end and (
             self.driver.title == page_title or not self.driver.title
-        ):
+        ) and not self._stop:
             pass
         if self.driver.title != page_title:
             return True
@@ -1590,7 +1606,7 @@ class Amazon:
             return False
         if check_cart_element:
             timeout = self.get_timeout()
-            while True:
+            while True and not self._stop:
                 try:
                     check_cart_element.is_displayed()
                 except sel_exceptions.StaleElementReferenceException:

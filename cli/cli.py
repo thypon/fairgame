@@ -25,7 +25,7 @@ import traceback
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from signal import SIGINT, signal
+from signal import SIGINT, SIGUSR1, SIGALRM, signal, alarm
 
 import click
 
@@ -253,13 +253,23 @@ def amazon(
         alt_offers=alt_offers,
         wait_on_captcha_fail=captcha_wait,
     )
-    try:
-        amzn_obj.run(delay=delay, test=test)
-    except RuntimeError:
-        del amzn_obj
-        log.error("Exiting Program...")
-        time.sleep(5)
 
+    signal(SIGUSR1, amzn_obj.start)
+
+    while True:
+        if amzn_obj.wait:
+            time.sleep(1)
+            continue
+        else:
+            amzn_obj.wait = True
+            signal(SIGALRM, amzn_obj.stop)
+            alarm(300) # 5 minutes
+
+        try:
+            amzn_obj.configure()
+            amzn_obj.run(delay=delay, test=test)
+        except:
+            log.error("Exiting AmazonBot...")
 
 @click.option(
     "--disable-sound",
