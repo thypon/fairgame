@@ -115,6 +115,7 @@ class Amazon:
         self.asin_list = []
         self.reserve_min = []
         self.reserve_max = []
+        self.AMAZON_URLS = {}
         self.checkshipping = checkshipping
         self.button_xpaths = BUTTON_XPATHS
         self.detailed = detailed
@@ -161,6 +162,11 @@ class Amazon:
         self.wait = False
 
     def configure(self):
+        self.asin_list = []
+        self.reserve_min = []
+        self.reserve_max = []
+        self.AMAZON_URLS = {}
+
         try:
             presence.start_presence()
         except Exception in pyexceptions:
@@ -218,12 +224,12 @@ class Amazon:
             exit(1)
 
         for key in AMAZON_URLS.keys():
-            AMAZON_URLS[key] = AMAZON_URLS[key].format(domain=self.amazon_website)
+            self.AMAZON_URLS[key] = AMAZON_URLS[key].format(domain=self.amazon_website)
         if self.alt_offers:
             log.info("Using alternate page for offer parsing.")
-            self.ACTIVE_OFFER_URL = AMAZON_URLS["ALT_OFFER_URL"]
+            self.ACTIVE_OFFER_URL = self.AMAZON_URLS["ALT_OFFER_URL"]
         else:
-            self.ACTIVE_OFFER_URL = AMAZON_URLS["OFFER_URL"]
+            self.ACTIVE_OFFER_URL = self.AMAZON_URLS["OFFER_URL"]
 
     def stop(self, _1, _2):
         log.info("Stopping Amazon bot")
@@ -238,12 +244,12 @@ class Amazon:
         log.info("Waiting for home page.")
         while True and not self._stop:
             try:
-                self.get_page(url=AMAZON_URLS["BASE_URL"])
+                self.get_page(url=self.AMAZON_URLS["BASE_URL"])
                 break
             except sel_exceptions.WebDriverException:
                 log.error(
                     "Couldn't talk to "
-                    + AMAZON_URLS["BASE_URL"]
+                    + self.AMAZON_URLS["BASE_URL"]
                     + ", if the address is right, there might be a network outage..."
                 )
                 time.sleep(3)
@@ -252,7 +258,7 @@ class Amazon:
         if cart_quantity > 0 and not self._stop:
             log.warning(f"Found {cart_quantity} item(s) in your cart.")
             log.info("Delete all item(s) in cart before starting bot.")
-            self.driver.get(AMAZON_URLS["CART_URL"])
+            self.driver.get(self.AMAZON_URLS["CART_URL"])
             log.info("Exiting in 30 seconds...")
             time.sleep(30)
             return
@@ -335,7 +341,7 @@ class Amazon:
         else:
             log.info("Lets log in.")
 
-            is_smile = "smile" in AMAZON_URLS["BASE_URL"]
+            is_smile = "smile" in self.AMAZON_URLS["BASE_URL"]
             xpath = (
                 '//*[@id="ge-hello"]/div/span/a'
                 if is_smile
@@ -865,7 +871,7 @@ class Amazon:
 
     def attempt_atc(self, offering_id, max_atc_retries=DEFAULT_MAX_ATC_TRIES):
         # Open the add.html URL in Selenium
-        f = f"{AMAZON_URLS['ATC_URL']}?OfferListingId.1={offering_id}&Quantity.1=1"
+        f = f"{self.AMAZON_URLS['ATC_URL']}?OfferListingId.1={offering_id}&Quantity.1=1"
         atc_attempts = 0
         while atc_attempts < max_atc_retries and not self._stop:
             with self.wait_for_page_content_change(timeout=5):
@@ -1048,7 +1054,7 @@ class Amazon:
             log.info("Going to try and redirect to cart page")
             try:
                 with self.wait_for_page_content_change(timeout=10):
-                    self.driver.get(AMAZON_URLS["CART_URL"])
+                    self.driver.get(self.AMAZON_URLS["CART_URL"])
             except sel_exceptions.WebDriverException:
                 log.error(
                     "Failed to load cart URL, refreshing and returning to handler"
@@ -1626,7 +1632,7 @@ class Amazon:
     def show_config(self):
         log.info(f"{'=' * 50}")
         log.info(
-            f"Starting Amazon ASIN Hunt on {AMAZON_URLS['BASE_URL']} for {len(self.asin_list)} Products with:"
+            f"Starting Amazon ASIN Hunt on {self.AMAZON_URLS['BASE_URL']} for {len(self.asin_list)} Products with:"
         )
         log.info(f"--Offer URL of: {self.ACTIVE_OFFER_URL}")
         log.info(f"--Delay of {self.refresh_delay} seconds")
@@ -1673,7 +1679,7 @@ class Amazon:
             log.info(f"--No images will be requested")
         if not self.notification_handler.sound_enabled:
             log.info(f"--Notification sounds are disabled.")
-        if self.ACTIVE_OFFER_URL == AMAZON_URLS["ALT_OFFER_URL"]:
+        if self.ACTIVE_OFFER_URL == self.AMAZON_URLS["ALT_OFFER_URL"]:
             log.info(f"--Using alternate offers URL")
         if self.testing:
             log.warning(f"--Testing Mode.  NO Purchases will be made.")
