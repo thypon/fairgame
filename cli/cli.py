@@ -268,6 +268,7 @@ def amazon(
         try:
             amzn_obj.configure()
             amzn_obj.run(delay=delay, test=test)
+            amzn_obj.wait = True
         except:
             log.error("Exiting AmazonBot...")
 
